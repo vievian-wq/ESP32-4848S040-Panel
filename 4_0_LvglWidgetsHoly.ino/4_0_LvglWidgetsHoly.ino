@@ -1,4 +1,8 @@
 /************************************************************
+ * IMPORTANT:
+ * - This file must contain only sketch code (no git diff text like "diff --git" or "@@").
+ * - If you see "stray @" compile errors, replace your local .ino with a clean copy of this file.
+ *
  * ESP32-S3 480x480 Smart Panel (LVGL)
  * Screens (5):
  *  1) HOME     - time/date + temp + condition icon animation
