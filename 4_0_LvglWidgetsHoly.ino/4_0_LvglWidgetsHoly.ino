@@ -27,6 +27,10 @@
 #include <Arduino_GFX_Library.h>
 #include <TAMC_GT911.h>
 
+#if !defined(CONFIG_IDF_TARGET_ESP32S3)
+#error "This sketch targets ESP32-S3 smart panel hardware. Select an ESP32-S3 board (not ESP32-C3)."
+#endif
+
 // -------------------- USER CONFIG --------------------
 
 // WiFi
