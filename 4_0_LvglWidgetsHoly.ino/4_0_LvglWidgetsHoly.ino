@@ -94,6 +94,10 @@ static const int PIN_B4 = 15;
 // Touch GT911 I2C
 static const int PIN_I2C_SDA = 19;
 static const int PIN_I2C_SCL = 45;
+static const int PIN_TOUCH_INT = -1;
+static const int PIN_TOUCH_RST = -1;
+static const uint16_t TOUCH_WIDTH = 480;
+static const uint16_t TOUCH_HEIGHT = 480;
 
 // Backlight PWM
 static const int BL_PWM_CH = 0;
@@ -140,7 +144,7 @@ static void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t
 }
 
 // Touch
-TAMC_GT911 tp;
+TAMC_GT911 tp(PIN_I2C_SDA, PIN_I2C_SCL, PIN_TOUCH_INT, PIN_TOUCH_RST, TOUCH_WIDTH, TOUCH_HEIGHT);
 static void my_touch_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data) {
   (void)indev_drv;
   tp.read();
