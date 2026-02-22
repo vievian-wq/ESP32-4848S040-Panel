@@ -196,6 +196,7 @@ static bool gMetric = true;
 static WeatherNow gNow;
 static ForecastDay gDays[3];
 static int gBrightness = 100;
+static bool gWeatherRefreshRequested = false;
 
 // -------------------- Networking Helpers --------------------
 static bool wifi_connect(uint32_t timeout_ms = 15000) {
@@ -243,8 +244,11 @@ static bool fetch_location_ipapi(Location &loc) {
 
   loc.lat = doc["lat"] | 0.0;
   loc.lon = doc["lon"] | 0.0;
-  loc.city = (const char*)doc["city"] | "";
-  loc.country = (const char*)doc["countryCode"] | "";
+  const char* city = doc["city"] | "";
+  const char* region = doc["regionName"] | "";
+  const char* country = doc["country"] | "";
+  loc.city = city;
+  loc.country = (strlen(region) > 0) ? region : country;
   loc.ok = true;
   return true;
 }
@@ -460,6 +464,7 @@ static lv_obj_t *sun_glow, *sun_disc;
 
 static WeatherMain gIconModeHome = WM_UNKNOWN;
 static WeatherMain gIconModeWeather = WM_UNKNOWN;
+static WeatherMain gDayIconMode[3] = {WM_UNKNOWN, WM_UNKNOWN, WM_UNKNOWN};
 
 // -------------------- Style Helpers --------------------
 static void set_space_background(lv_obj_t *obj) {
@@ -580,6 +585,12 @@ static void set_weather_icon(lv_obj_t *container, WeatherMain wm) {
   }
 }
 
+static void set_weather_icon_if_changed(lv_obj_t *container, WeatherMain desired, WeatherMain &state) {
+  if (desired == state) return;
+  state = desired;
+  set_weather_icon(container, desired);
+}
+
 // -------------------- Navigation (bottom bar) --------------------
 static void go_screen(lv_obj_t *scr) {
   lv_scr_load(scr);
@@ -673,7 +684,7 @@ static void build_home() {
   navbar = build_navbar(scr_home, "home");
 
   // initial icon
-  set_weather_icon(home_icon_container, WM_CLOUDS);
+  set_weather_icon_if_changed(home_icon_container, WM_CLOUDS, gIconModeHome);
 }
 
 static void light_toggle_event(lv_event_t *e) {
@@ -793,7 +804,7 @@ static void build_weather() {
     lv_obj_align(day_lbl_mm[i], LV_ALIGN_BOTTOM_MID, 0, -10);
 
     // initial icon
-    set_weather_icon(day_icon_box[i], WM_CLOUDS);
+    set_weather_icon_if_changed(day_icon_box[i], WM_CLOUDS, gDayIconMode[i]);
   }
 
   navbar = build_navbar(scr_weather, "weather");
@@ -902,10 +913,7 @@ static void update_home_ui() {
     lv_label_set_text(lbl_temp, buf);
     lv_label_set_text(lbl_cond, gNow.desc.c_str());
 
-    if (gNow.main != gIconModeHome) {
-      gIconModeHome = gNow.main;
-      set_weather_icon(home_icon_container, gIconModeHome);
-    }
+    set_weather_icon_if_changed(home_icon_container, gNow.main, gIconModeHome);
   }
 }
 
@@ -927,7 +935,7 @@ static void update_weather_ui() {
     snprintf(mm, sizeof(mm), "%.0f° / %.0f°", gDays[i].tMin, gDays[i].tMax);
     lv_label_set_text(day_lbl_mm[i], mm);
 
-    set_weather_icon(day_icon_box[i], gDays[i].main);
+    set_weather_icon_if_changed(day_icon_box[i], gDays[i].main, gDayIconMode[i]);
   }
 }
 
@@ -949,15 +957,24 @@ static void settings_poll() {
   if (newAuto != gUseAutoLocation) {
     gUseAutoLocation = newAuto;
     lv_label_set_text(lbl_loc_mode, gUseAutoLocation ? "Location: Auto" : "Location: London");
-    // force refresh location/weather soon
+    gWeatherRefreshRequested = true;
   }
 }
 
 // -------------------- Periodic Timers --------------------
+static void refresh_location_and_weather();
+
 static void timer_1s_cb(lv_timer_t *t) {
   (void)t;
-  update_home_ui();
   settings_poll();
+
+  if (gWeatherRefreshRequested) {
+    gWeatherRefreshRequested = false;
+    refresh_location_and_weather();
+    update_weather_ui();
+  }
+
+  update_home_ui();
 }
 
 static void refresh_location_and_weather() {
