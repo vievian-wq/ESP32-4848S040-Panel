@@ -457,8 +457,6 @@ static lv_obj_t *lbl_loc_mode;
 // Animation objects (simple LVGL shapes)
 static lv_obj_t *home_icon_container;
 static lv_obj_t *sun_glow, *sun_disc;
-static lv_obj_t *rain_drops[10];
-static int rain_x[10], rain_y[10];
 
 static WeatherMain gIconModeHome = WM_UNKNOWN;
 static WeatherMain gIconModeWeather = WM_UNKNOWN;
@@ -532,18 +530,6 @@ static void create_sun_icon(lv_obj_t *parent) {
   lv_anim_start(&a2);
 }
 
-static void rain_step(lv_timer_t* t) {
-  (void)t;
-  for (int i=0;i<10;i++) {
-    rain_y[i] += 12;
-    if (rain_y[i] > 120) {
-      rain_y[i] = 0;
-      rain_x[i] = 10 + (esp_random() % 110);
-    }
-    lv_obj_set_pos(rain_drops[i], rain_x[i], rain_y[i]);
-  }
-}
-
 static void create_rain_icon(lv_obj_t *parent) {
   clear_icon_objects(parent);
 
@@ -558,19 +544,17 @@ static void create_rain_icon(lv_obj_t *parent) {
 
   // drops
   for (int i=0;i<10;i++) {
-    rain_drops[i] = lv_obj_create(parent);
-    lv_obj_set_size(rain_drops[i], 6, 18);
-    lv_obj_set_style_radius(rain_drops[i], 3, 0);
-    lv_obj_set_style_bg_color(rain_drops[i], lv_color_hex(0x4DA6FF), 0);
-    lv_obj_set_style_bg_opa(rain_drops[i], LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(rain_drops[i], 0, 0);
+    lv_obj_t* drop = lv_obj_create(parent);
+    lv_obj_set_size(drop, 6, 18);
+    lv_obj_set_style_radius(drop, 3, 0);
+    lv_obj_set_style_bg_color(drop, lv_color_hex(0x4DA6FF), 0);
+    lv_obj_set_style_bg_opa(drop, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(drop, 0, 0);
 
-    rain_x[i] = 10 + (esp_random() % 110);
-    rain_y[i] = 50 + (esp_random() % 70);
-    lv_obj_set_pos(rain_drops[i], rain_x[i], rain_y[i]);
+    int rain_x = 10 + (esp_random() % 110);
+    int rain_y = 50 + (esp_random() % 70);
+    lv_obj_set_pos(drop, rain_x, rain_y);
   }
-
-  lv_timer_create(rain_step, 60, NULL);
 }
 
 static void create_clouds_icon(lv_obj_t *parent) {
