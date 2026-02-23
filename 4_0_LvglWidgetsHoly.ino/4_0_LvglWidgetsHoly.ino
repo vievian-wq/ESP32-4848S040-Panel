@@ -1,4 +1,8 @@
 /************************************************************
+ * IMPORTANT:
+ * - This file must contain only sketch code (no git diff text like "diff --git" or "@@").
+ * - If you see "stray @" compile errors, replace your local .ino with a clean copy of this file.
+ *
  * ESP32-S3 480x480 Smart Panel (LVGL)
  * Screens (5):
  *  1) HOME     - time/date + temp + condition icon animation
@@ -26,6 +30,39 @@
 #include <lvgl.h>
 #include <Arduino_GFX_Library.h>
 #include <TAMC_GT911.h>
+
+// Forward declarations for Arduino auto-prototype generation
+struct Location;
+enum WeatherMain : int;
+struct WeatherNow;
+struct ForecastDay;
+
+// Font fallbacks when larger Montserrat sizes are not enabled in lv_conf.h
+#ifndef LV_FONT_MONTSERRAT_16
+#define lv_font_montserrat_16 lv_font_montserrat_14
+#endif
+#ifndef LV_FONT_MONTSERRAT_18
+#define lv_font_montserrat_18 lv_font_montserrat_14
+#endif
+#ifndef LV_FONT_MONTSERRAT_20
+#define lv_font_montserrat_20 lv_font_montserrat_14
+#endif
+#ifndef LV_FONT_MONTSERRAT_28
+#define lv_font_montserrat_28 lv_font_montserrat_14
+#endif
+#ifndef LV_FONT_MONTSERRAT_44
+#define lv_font_montserrat_44 lv_font_montserrat_14
+#endif
+#ifndef LV_FONT_MONTSERRAT_48
+#define lv_font_montserrat_48 lv_font_montserrat_14
+#endif
+#ifndef LV_FONT_MONTSERRAT_72
+#define lv_font_montserrat_72 lv_font_montserrat_14
+#endif
+
+#if !defined(CONFIG_IDF_TARGET_ESP32S3)
+#warning "Building on non-ESP32-S3 target. This sketch is designed for ESP32-S3 RGB panel hardware and may not work correctly."
+#endif
 
 // -------------------- USER CONFIG --------------------
 
@@ -94,19 +131,43 @@ static const int PIN_B4 = 15;
 // Touch GT911 I2C
 static const int PIN_I2C_SDA = 19;
 static const int PIN_I2C_SCL = 45;
+static const int PIN_TOUCH_INT = -1;
+static const int PIN_TOUCH_RST = -1;
+static const uint16_t TOUCH_WIDTH = 480;
+static const uint16_t TOUCH_HEIGHT = 480;
 
 // Backlight PWM
 static const int BL_PWM_CH = 0;
 static const int BL_PWM_FREQ = 150;
 static const int BL_PWM_RES = 10;
 
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+static void backlight_pwm_init() {
+  ledcAttach(PIN_BL, BL_PWM_FREQ, BL_PWM_RES);
+}
+
+static void backlight_pwm_write(uint32_t duty) {
+  ledcWrite(PIN_BL, duty);
+}
+#else
+static void backlight_pwm_init() {
+  ledcSetup(BL_PWM_CH, BL_PWM_FREQ, BL_PWM_RES);
+  ledcAttachPin(PIN_BL, BL_PWM_CH);
+}
+
+static void backlight_pwm_write(uint32_t duty) {
+  ledcWrite(BL_PWM_CH, duty);
+}
+#endif
+
 static void backlight_set_percent(uint8_t pct) {
   if (pct > 100) pct = 100;
   uint32_t duty = (uint32_t)pct * ((1 << BL_PWM_RES) - 1) / 100;
-  ledcWrite(BL_PWM_CH, duty);
+  backlight_pwm_write(duty);
 }
 
 // -------------------- Display (Arduino_GFX) --------------------
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
 Arduino_DataBus *bus = new Arduino_SWSPI(
   /*dc=*/-1, /*cs=*/PIN_LCD_CS, /*sck=*/PIN_LCD_SCK, /*mosi=*/PIN_LCD_MOSI, /*miso=*/-1
 );
@@ -127,6 +188,9 @@ Arduino_GFX *gfx = new Arduino_ST7701_RGBPanel(
   /*ips=*/false,
   /*width=*/480, /*height=*/480
 );
+#else
+Arduino_GFX *gfx = nullptr;
+#endif
 
 // -------------------- LVGL Glue --------------------
 static lv_disp_draw_buf_t draw_buf;
@@ -135,12 +199,12 @@ static lv_color_t *buf1 = nullptr;
 static void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
   uint32_t w = (area->x2 - area->x1 + 1);
   uint32_t h = (area->y2 - area->y1 + 1);
-  gfx->draw16bitRGBBitmap(area->x1, area->y1, (uint16_t *)color_p, w, h);
+  if (gfx) gfx->draw16bitRGBBitmap(area->x1, area->y1, (uint16_t *)color_p, w, h);
   lv_disp_flush_ready(disp);
 }
 
 // Touch
-TAMC_GT911 tp;
+TAMC_GT911 tp(PIN_I2C_SDA, PIN_I2C_SCL, PIN_TOUCH_INT, PIN_TOUCH_RST, TOUCH_WIDTH, TOUCH_HEIGHT);
 static void my_touch_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data) {
   (void)indev_drv;
   tp.read();
@@ -162,7 +226,7 @@ struct Location {
   String country;
 };
 
-enum WeatherMain {
+enum WeatherMain : int {
   WM_UNKNOWN,
   WM_CLEAR,
   WM_RAIN,
@@ -196,6 +260,7 @@ static bool gMetric = true;
 static WeatherNow gNow;
 static ForecastDay gDays[3];
 static int gBrightness = 100;
+static bool gWeatherRefreshRequested = false;
 
 // -------------------- Networking Helpers --------------------
 static bool wifi_connect(uint32_t timeout_ms = 15000) {
@@ -243,8 +308,11 @@ static bool fetch_location_ipapi(Location &loc) {
 
   loc.lat = doc["lat"] | 0.0;
   loc.lon = doc["lon"] | 0.0;
-  loc.city = (const char*)doc["city"] | "";
-  loc.country = (const char*)doc["countryCode"] | "";
+  const char* city = doc["city"] | "";
+  const char* region = doc["regionName"] | "";
+  const char* country = doc["country"] | "";
+  loc.city = city;
+  loc.country = (strlen(region) > 0) ? region : country;
   loc.ok = true;
   return true;
 }
@@ -460,6 +528,7 @@ static lv_obj_t *sun_glow, *sun_disc;
 
 static WeatherMain gIconModeHome = WM_UNKNOWN;
 static WeatherMain gIconModeWeather = WM_UNKNOWN;
+static WeatherMain gDayIconMode[3] = {WM_UNKNOWN, WM_UNKNOWN, WM_UNKNOWN};
 
 // -------------------- Style Helpers --------------------
 static void set_space_background(lv_obj_t *obj) {
@@ -580,6 +649,12 @@ static void set_weather_icon(lv_obj_t *container, WeatherMain wm) {
   }
 }
 
+static void set_weather_icon_if_changed(lv_obj_t *container, WeatherMain desired, WeatherMain &state) {
+  if (desired == state) return;
+  state = desired;
+  set_weather_icon(container, desired);
+}
+
 // -------------------- Navigation (bottom bar) --------------------
 static void go_screen(lv_obj_t *scr) {
   lv_scr_load(scr);
@@ -673,7 +748,7 @@ static void build_home() {
   navbar = build_navbar(scr_home, "home");
 
   // initial icon
-  set_weather_icon(home_icon_container, WM_CLOUDS);
+  set_weather_icon_if_changed(home_icon_container, WM_CLOUDS, gIconModeHome);
 }
 
 static void light_toggle_event(lv_event_t *e) {
@@ -793,7 +868,7 @@ static void build_weather() {
     lv_obj_align(day_lbl_mm[i], LV_ALIGN_BOTTOM_MID, 0, -10);
 
     // initial icon
-    set_weather_icon(day_icon_box[i], WM_CLOUDS);
+    set_weather_icon_if_changed(day_icon_box[i], WM_CLOUDS, gDayIconMode[i]);
   }
 
   navbar = build_navbar(scr_weather, "weather");
@@ -902,10 +977,7 @@ static void update_home_ui() {
     lv_label_set_text(lbl_temp, buf);
     lv_label_set_text(lbl_cond, gNow.desc.c_str());
 
-    if (gNow.main != gIconModeHome) {
-      gIconModeHome = gNow.main;
-      set_weather_icon(home_icon_container, gIconModeHome);
-    }
+    set_weather_icon_if_changed(home_icon_container, gNow.main, gIconModeHome);
   }
 }
 
@@ -927,7 +999,7 @@ static void update_weather_ui() {
     snprintf(mm, sizeof(mm), "%.0f° / %.0f°", gDays[i].tMin, gDays[i].tMax);
     lv_label_set_text(day_lbl_mm[i], mm);
 
-    set_weather_icon(day_icon_box[i], gDays[i].main);
+    set_weather_icon_if_changed(day_icon_box[i], gDays[i].main, gDayIconMode[i]);
   }
 }
 
@@ -949,15 +1021,24 @@ static void settings_poll() {
   if (newAuto != gUseAutoLocation) {
     gUseAutoLocation = newAuto;
     lv_label_set_text(lbl_loc_mode, gUseAutoLocation ? "Location: Auto" : "Location: London");
-    // force refresh location/weather soon
+    gWeatherRefreshRequested = true;
   }
 }
 
 // -------------------- Periodic Timers --------------------
+static void refresh_location_and_weather();
+
 static void timer_1s_cb(lv_timer_t *t) {
   (void)t;
-  update_home_ui();
   settings_poll();
+
+  if (gWeatherRefreshRequested) {
+    gWeatherRefreshRequested = false;
+    refresh_location_and_weather();
+    update_weather_ui();
+  }
+
+  update_home_ui();
 }
 
 static void refresh_location_and_weather() {
@@ -1003,8 +1084,7 @@ void setup() {
   delay(300);
 
   // Backlight
-  ledcSetup(BL_PWM_CH, BL_PWM_FREQ, BL_PWM_RES);
-  ledcAttachPin(PIN_BL, BL_PWM_CH);
+  backlight_pwm_init();
   backlight_set_percent((uint8_t)gBrightness);
 
   // I2C touch
@@ -1012,11 +1092,11 @@ void setup() {
   Wire.setClock(400000);
 
   // Display init
-  if (!gfx->begin()) {
+  if (!gfx || !gfx->begin()) {
     Serial.println("Display init failed.");
     while (1) delay(100);
   }
-  gfx->fillScreen(BLACK);
+  if (gfx) gfx->fillScreen(RGB565_BLACK);
 
   // LVGL init
   lv_init();
