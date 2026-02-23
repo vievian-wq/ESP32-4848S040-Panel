@@ -32,7 +32,7 @@
 #include <TAMC_GT911.h>
 
 #if !defined(CONFIG_IDF_TARGET_ESP32S3)
-#error "This sketch targets ESP32-S3 smart panel hardware. Select an ESP32-S3 board (not ESP32-C3)."
+#error "This sketch requires an ESP32-S3 board target (e.g. ESP32S3 Dev Module). Your selected board is not ESP32-S3."
 #endif
 
 // -------------------- USER CONFIG --------------------
