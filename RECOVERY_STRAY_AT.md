@@ -35,3 +35,20 @@ Your library versions are fine for this sketch:
 - `ArduinoJson` `7.4.2`
 
 The current failure is caused by local file corruption, not by missing libraries.
+
+## Do NOT copy from Diff view
+
+If you copy from a PR/"Diff" tab, you may accidentally copy lines like:
+- `@@ -1,54 +1,62 @@`
+- `+...` / `-...`
+
+Always copy from the **raw file view** of `4_0_LvglWidgetsHoly.ino/4_0_LvglWidgetsHoly.ino`.
+
+## Quick self-check before compile
+
+Open your local `.ino` and confirm:
+- line 1 starts with `/************************************************************`
+- there is **no** line containing `@@`
+- there is **no** line starting with `diff --git`
+
+If any of those appear, the file is still a patch, not a sketch.
