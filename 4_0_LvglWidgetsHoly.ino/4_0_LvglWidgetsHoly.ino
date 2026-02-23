@@ -38,8 +38,8 @@
 // -------------------- USER CONFIG --------------------
 
 // WiFi
-static const char* WIFI_SSID = "YOUR_WIFI_SSID";
-static const char* WIFI_PASS = "YOUR_WIFI_PASSWORD";
+static const char* WIFI_SSID = "EE-2WCXXF";
+static const char* WIFI_PASS = "DQPKqvuarXmAb7";
 
 // Time (UK: GMT offset 0; BST offset 3600 when needed)
 static const char* NTP_SERVER_1 = "pool.ntp.org";
@@ -1116,3 +1116,4 @@ void loop() {
   lv_timer_handler();
   delay(5);
 }
+
