@@ -79,3 +79,24 @@ For `C:\Users\vievi\Documents\Arduino\HOLY\sketch_feb23a\sketch_feb23a.ino`:
 3. Save.
 4. Re-run the two `findstr` commands above; they must print nothing.
 5. Build again using an ESP32-S3 board profile.
+
+## If GitHub looks stale (no new updates)
+
+If GitHub still shows old content, usually local commits were created but not pushed from your machine.
+
+Run in your local repo terminal:
+
+```bash
+git status
+git branch --show-current
+git log --oneline -n 5
+git remote -v
+git push origin <your-branch>
+```
+
+If you are editing in GitHub web UI, make sure you click **Commit changes** (or **Create pull request** then merge).
+
+Quick check:
+- `git status` should be clean after commit.
+- `git log -n 1` should show your latest commit message.
+- On GitHub, open the same branch name you pushed.
