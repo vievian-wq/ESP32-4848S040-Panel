@@ -26,6 +26,7 @@
 #include <ArduinoJson.h>
 #include <Wire.h>
 #include <time.h>
+#include <strings.h>
 
 #include <lvgl.h>
 #include <Arduino_GFX_Library.h>
@@ -261,6 +262,28 @@ static WeatherNow gNow;
 static ForecastDay gDays[3];
 static int gBrightness = 100;
 static bool gWeatherRefreshRequested = false;
+
+static bool is_ascii_space(char c) {
+  return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
+static bool weather_units_is_imperial() {
+  const char* s = OWM_UNITS;
+  if (!s) return false;
+
+  while (*s && is_ascii_space(*s)) s++;
+
+  const char* e = s;
+  while (*e) e++;
+  while (e > s && is_ascii_space(*(e - 1))) e--;
+
+  const size_t len = (size_t)(e - s);
+  if (len == 8 && strncasecmp(s, "imperial", 8) == 0) return true;
+  if (len == 6 && strncasecmp(s, "metric", 6) == 0) return false;
+
+  Serial.printf("Unknown OWM_UNITS '%s'; defaulting to metric.\n", OWM_UNITS ? OWM_UNITS : "(null)");
+  return false;
+}
 
 // -------------------- Networking Helpers --------------------
 static bool wifi_connect(uint32_t timeout_ms = 15000) {
@@ -1082,6 +1105,8 @@ static void timer_news_cb(lv_timer_t *t) {
 void setup() {
   Serial.begin(115200);
   delay(300);
+
+  gMetric = !weather_units_is_imperial();
 
   // Backlight
   backlight_pwm_init();
