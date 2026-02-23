@@ -47,8 +47,13 @@ Always copy from the **raw file view** of `4_0_LvglWidgetsHoly.ino/4_0_LvglWidge
 ## Quick self-check before compile
 
 Open your local `.ino` and confirm:
-- line 1 starts with `/************************************************************`
+- line 1 should start with the sketch header comment banner (the first line in the repo file)
 - there is **no** line containing `@@`
 - there is **no** line starting with `diff --git`
 
 If any of those appear, the file is still a patch, not a sketch.
+
+## If you get `unterminated comment`
+
+This usually means markdown/checklist text was pasted into the `.ino` (for example lines starting with `+-` or backticked snippets).
+Delete all local `.ino` content and paste only the raw sketch file contents again.
