@@ -57,3 +57,25 @@ If any of those appear, the file is still a patch, not a sketch.
 
 This usually means markdown/checklist text was pasted into the `.ino` (for example lines starting with `+-` or backticked snippets).
 Delete all local `.ino` content and paste only the raw sketch file contents again.
+
+## Fast verification commands (Windows CMD)
+
+Run these against your local sketch before pressing Verify:
+
+```cmd
+findstr /n /c:"@@" "C:\Users\vievi\Documents\Arduino\HOLY\sketch_feb23a\sketch_feb23a.ino"
+findstr /n /c:"diff --git" "C:\Users\vievi\Documents\Arduino\HOLY\sketch_feb23a\sketch_feb23a.ino"
+```
+
+- If either command prints any line, your file is still a patch, not a sketch.
+- A clean sketch should return no output for both commands.
+
+## One-file repair checklist for your current folder
+
+For `C:\Users\vievi\Documents\Arduino\HOLY\sketch_feb23a\sketch_feb23a.ino`:
+
+1. Open the file and select all (`Ctrl+A`) then delete.
+2. Paste only the raw source from `4_0_LvglWidgetsHoly.ino/4_0_LvglWidgetsHoly.ino`.
+3. Save.
+4. Re-run the two `findstr` commands above; they must print nothing.
+5. Build again using an ESP32-S3 board profile.
