@@ -39,25 +39,25 @@ struct WeatherNow;
 struct ForecastDay;
 
 // Font fallbacks when larger Montserrat sizes are not enabled in lv_conf.h
-#ifndef LV_FONT_MONTSERRAT_16
+#if !defined(LV_FONT_MONTSERRAT_16) || !LV_FONT_MONTSERRAT_16
 #define lv_font_montserrat_16 lv_font_montserrat_14
 #endif
-#ifndef LV_FONT_MONTSERRAT_18
+#if !defined(LV_FONT_MONTSERRAT_18) || !LV_FONT_MONTSERRAT_18
 #define lv_font_montserrat_18 lv_font_montserrat_14
 #endif
-#ifndef LV_FONT_MONTSERRAT_20
+#if !defined(LV_FONT_MONTSERRAT_20) || !LV_FONT_MONTSERRAT_20
 #define lv_font_montserrat_20 lv_font_montserrat_14
 #endif
-#ifndef LV_FONT_MONTSERRAT_28
+#if !defined(LV_FONT_MONTSERRAT_28) || !LV_FONT_MONTSERRAT_28
 #define lv_font_montserrat_28 lv_font_montserrat_14
 #endif
-#ifndef LV_FONT_MONTSERRAT_44
+#if !defined(LV_FONT_MONTSERRAT_44) || !LV_FONT_MONTSERRAT_44
 #define lv_font_montserrat_44 lv_font_montserrat_14
 #endif
-#ifndef LV_FONT_MONTSERRAT_48
+#if !defined(LV_FONT_MONTSERRAT_48) || !LV_FONT_MONTSERRAT_48
 #define lv_font_montserrat_48 lv_font_montserrat_14
 #endif
-#ifndef LV_FONT_MONTSERRAT_72
+#if !defined(LV_FONT_MONTSERRAT_72) || !LV_FONT_MONTSERRAT_72
 #define lv_font_montserrat_72 lv_font_montserrat_14
 #endif
 
@@ -169,22 +169,17 @@ static void backlight_set_percent(uint8_t pct) {
 
 // -------------------- Display (Arduino_GFX) --------------------
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
-Arduino_DataBus *bus = new Arduino_SWSPI(
-  /*dc=*/-1, /*cs=*/PIN_LCD_CS, /*sck=*/PIN_LCD_SCK, /*mosi=*/PIN_LCD_MOSI, /*miso=*/-1
-);
-
 Arduino_ESP32RGBPanel *rgbpanel = new Arduino_ESP32RGBPanel(
   PIN_DE, PIN_VSYNC, PIN_HSYNC, PIN_PCLK,
   PIN_R0, PIN_R1, PIN_R2, PIN_R3, PIN_R4,
   PIN_G0, PIN_G1, PIN_G2, PIN_G3, PIN_G4, PIN_G5,
   PIN_B0, PIN_B1, PIN_B2, PIN_B3, PIN_B4,
-  /*hsync_polarity=*/0, /*hsync_front_porch=*/10, /*hsync_pulse_width=*/8, /*hsync_back_porch=*/20,
-  /*vsync_polarity=*/0, /*vsync_front_porch=*/10, /*vsync_pulse_width=*/8, /*vsync_back_porch=*/10,
-  /*pclk_active_neg=*/0, /*prefer_speed=*/12000000, /*auto_flush=*/true
+  /*hsync_polarity=*/0, /*vsync_polarity=*/0,
+  /*pclk_active_neg=*/0, /*auto_flush=*/true
 );
 
 Arduino_GFX *gfx = new Arduino_ST7701_RGBPanel(
-  bus, rgbpanel,
+  rgbpanel,
   /*rst=*/-1, /*rotation=*/0,
   /*ips=*/false,
   /*width=*/480, /*height=*/480
@@ -1108,6 +1103,8 @@ void setup() {
 
   gMetric = !weather_units_is_imperial();
 
+  gMetric = !weather_units_is_imperial();
+
   // Backlight
   backlight_pwm_init();
   backlight_set_percent((uint8_t)gBrightness);
@@ -1117,11 +1114,12 @@ void setup() {
   Wire.setClock(400000);
 
   // Display init
-  if (!gfx || !gfx->begin()) {
-    Serial.println("Display init failed.");
+  if (!gfx) {
+    Serial.println("Display object missing.");
     while (1) delay(100);
   }
-  if (gfx) gfx->fillScreen(RGB565_BLACK);
+  gfx->begin();
+  gfx->fillScreen(BLACK);
 
   // LVGL init
   lv_init();
