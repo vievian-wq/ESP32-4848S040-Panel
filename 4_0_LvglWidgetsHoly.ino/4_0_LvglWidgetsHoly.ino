@@ -465,11 +465,15 @@ static bool fetch_weather_3day(float lat, float lon, ForecastDay outDays[3]) {
   if (getLocalTime(&timeinfo, 200)) {
     // Create a copy and add 2 days
     time_t raw = mktime(&timeinfo);
-    raw += 2 * 24 * 3600;
-    struct tm *t2 = localtime(&raw);
-    char wbuf[16];
-    strftime(wbuf, sizeof(wbuf), "%A", t2);
-    outDays[2].dayLabel = wbuf;
+    if (raw != (time_t)-1) {
+      raw += 2 * 24 * 3600;
+      struct tm t2;
+      if (localtime_r(&raw, &t2) != nullptr) {
+        char wbuf[16];
+        strftime(wbuf, sizeof(wbuf), "%A", &t2);
+        outDays[2].dayLabel = wbuf;
+      }
+    }
   }
 
   for (int i=0;i<3;i++){
