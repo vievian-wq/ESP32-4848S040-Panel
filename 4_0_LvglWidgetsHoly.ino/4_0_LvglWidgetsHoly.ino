@@ -151,16 +151,8 @@ static const int BL_PWM_CH = 0;
 static const int BL_PWM_FREQ = 150;
 static const int BL_PWM_RES = 10;
 
-#if ESP_ARDUINO_VERSION_MAJOR >= 3
 static void backlight_pwm_init() {
-  ledcAttach(PIN_BL, BL_PWM_FREQ, BL_PWM_RES);
-}
-
-static void backlight_pwm_write(uint32_t duty) {
-  ledcWrite(PIN_BL, duty);
-}
-#else
-static void backlight_pwm_init() {
+  // Use explicit LEDC channel API on all core versions to avoid pin/channel API mismatches.
   ledcSetup(BL_PWM_CH, BL_PWM_FREQ, BL_PWM_RES);
   ledcAttachPin(PIN_BL, BL_PWM_CH);
 }
@@ -168,7 +160,7 @@ static void backlight_pwm_init() {
 static void backlight_pwm_write(uint32_t duty) {
   ledcWrite(BL_PWM_CH, duty);
 }
-#endif
+
 
 static void backlight_set_percent(uint8_t pct) {
   if (pct > 100) pct = 100;
