@@ -1063,7 +1063,17 @@ static void refresh_location_and_weather() {
   // location
   if (gUseAutoLocation) {
     Location loc;
-    if (fetch_location_ipapi(loc)) gLoc = loc;
+    if (fetch_location_ipapi(loc)) {
+      gLoc = loc;
+    } else {
+      // Fallback prevents blank weather when geo-IP service is unavailable.
+      gLoc.ok = true;
+      gLoc.lat = LONDON_LAT;
+      gLoc.lon = LONDON_LON;
+      gLoc.city = "London";
+      gLoc.country = "GB";
+      Serial.println("Auto location failed; using London fallback.");
+    }
   } else {
     gLoc.ok = true;
     gLoc.lat = LONDON_LAT;
@@ -1100,8 +1110,6 @@ static void timer_news_cb(lv_timer_t *t) {
 void setup() {
   Serial.begin(115200);
   delay(300);
-
-  gMetric = !weather_units_is_imperial();
 
   gMetric = !weather_units_is_imperial();
 
