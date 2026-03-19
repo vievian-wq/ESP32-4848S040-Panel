@@ -31,7 +31,6 @@
 #include <WiFiClientSecure.h>
 #include <time.h>
 #include <math.h>
-#include <esp_timer.h>
 
 #include <SdFat.h>
 #include <ArduinoJson.h>
@@ -149,7 +148,6 @@ Arduino_ST7701_RGBPanel *gfx = new Arduino_ST7701_RGBPanel(
 static lv_disp_draw_buf_t draw_buf;
 static lv_color_t *buf1 = nullptr;
 static lv_color_t *buf2 = nullptr;
-static esp_timer_handle_t lvgl_tick_timer = nullptr;
 
 // =========================================================
 // APP STATE
@@ -362,14 +360,6 @@ static lv_obj_t *create_glass_card(lv_obj_t *parent, int x, int y, int w, int h)
   lv_obj_set_style_shadow_color(obj, C_BORDER(), 0);
   lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
   return obj;
-}
-
-// =========================================================
-// LVGL tick
-// =========================================================
-static void lv_tick_cb(void *arg) {
-  (void)arg;
-  lv_tick_inc(1);
 }
 
 // =========================================================
@@ -1074,16 +1064,6 @@ void setup() {
   // LVGL init
   lv_init();
   Serial.println("C: after lv_init()");
-
-  // LVGL tick timer
-  const esp_timer_create_args_t lvgl_tick_timer_args = {
-    .callback = &lv_tick_cb,
-    .arg = nullptr,
-    .dispatch_method = ESP_TIMER_TASK,
-    .name = "lvgl_tick"
-  };
-  esp_timer_create(&lvgl_tick_timer_args, &lvgl_tick_timer);
-  esp_timer_start_periodic(lvgl_tick_timer, 1000);
 
   // buffers
   const size_t buf_pixels = TFT_WIDTH * 40;
