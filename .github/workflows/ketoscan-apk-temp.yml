@@ -1,18 +1,21 @@
 name: Temporary KetoScan APK Build
 
 on:
+  push:
+    branches:
+      - ketoscan-apk-clean-rebuild
   pull_request:
     branches:
       - main
 
 jobs:
   build:
-    if: startsWith(github.head_ref, 'ketoscan-')
+    if: github.event_name == 'push' || startsWith(github.head_ref, 'ketoscan-')
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - name: Checkout PR
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Reconstruct KetoScan source archive
