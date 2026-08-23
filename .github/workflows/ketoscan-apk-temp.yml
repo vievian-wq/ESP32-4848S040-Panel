@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    if: github.head_ref == 'ketoscan-build-v0.2'
+    if: startsWith(github.head_ref, 'ketoscan-')
     runs-on: ubuntu-latest
     permissions:
       contents: read
