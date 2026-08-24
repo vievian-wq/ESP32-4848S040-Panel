@@ -1,1 +1,0 @@
-Trigger KetoScan APK rebuild after scanner import and camera URI fixes.
