@@ -1,143 +1,195 @@
 #include <Arduino.h>
+#include <Wire.h>
 #include <Arduino_GFX_Library.h>
+#include <Touch_GT911.h>
 
-#if !defined(CONFIG_IDF_TARGET_ESP32S3)
-#warning "This sketch targets ESP32-S3 RGB panel boards."
-#endif
+// ================== DISPLAY (Twoje działające piny) ==================
+#define GFX_BL 38
 
-// Pins for ESP32-4848S040 panel (same mapping as main project)
-static const int PIN_DE    = 18;
-static const int PIN_HSYNC = 16;
-static const int PIN_VSYNC = 17;
-static const int PIN_PCLK  = 21;
-
-static const int PIN_BL = 38;
-
-static const int PIN_R0 = 11;
-static const int PIN_R1 = 12;
-static const int PIN_R2 = 13;
-static const int PIN_R3 = 14;
-static const int PIN_R4 = 0;
-
-static const int PIN_G0 = 8;
-static const int PIN_G1 = 20;
-static const int PIN_G2 = 3;
-static const int PIN_G3 = 46;
-static const int PIN_G4 = 9;
-static const int PIN_G5 = 10;
-
-static const int PIN_B0 = 4;
-static const int PIN_B1 = 5;
-static const int PIN_B2 = 6;
-static const int PIN_B3 = 7;
-static const int PIN_B4 = 15;
-
-// Backlight PWM
-static const int BL_PWM_FREQ = 150;
-static const int BL_PWM_RES = 10;
-
-#if ESP_ARDUINO_VERSION_MAJOR >= 3
-static void backlight_pwm_init() {
-  ledcAttach(PIN_BL, BL_PWM_FREQ, BL_PWM_RES);
-}
-
-static void backlight_pwm_write(uint32_t duty) {
-  ledcWrite(PIN_BL, duty);
-}
-#else
-static const int BL_PWM_CH = 0;
-static void backlight_pwm_init() {
-  ledcSetup(BL_PWM_CH, BL_PWM_FREQ, BL_PWM_RES);
-  ledcAttachPin(PIN_BL, BL_PWM_CH);
-}
-
-static void backlight_pwm_write(uint32_t duty) {
-  ledcWrite(BL_PWM_CH, duty);
-}
-#endif
-
-static void backlight_set_percent(uint8_t pct) {
-  if (pct > 100) pct = 100;
-  uint32_t duty = (uint32_t)pct * ((1 << BL_PWM_RES) - 1) / 100;
-  backlight_pwm_write(duty);
-}
-
-#if defined(CONFIG_IDF_TARGET_ESP32S3)
-Arduino_ESP32RGBPanel *rgbpanel = new Arduino_ESP32RGBPanel(
-  PIN_DE, PIN_VSYNC, PIN_HSYNC, PIN_PCLK,
-  PIN_R0, PIN_R1, PIN_R2, PIN_R3, PIN_R4,
-  PIN_G0, PIN_G1, PIN_G2, PIN_G3, PIN_G4, PIN_G5,
-  PIN_B0, PIN_B1, PIN_B2, PIN_B3, PIN_B4,
-  /*hsync_polarity=*/0, /*vsync_polarity=*/0,
-  /*pclk_active_neg=*/0, /*auto_flush=*/true
+Arduino_ESP32RGBPanel *bus = new Arduino_ESP32RGBPanel(
+  39 /* CS */, 48 /* SCK */, 47 /* SDA or MOSI */,
+  18 /* DE */, 17 /* VSYNC */, 16 /* HSYNC */, 21 /* PCLK */,
+  11 /* R0 */, 12 /* R1 */, 13 /* R2 */, 14 /* R3 */, 0  /* R4 */,
+  8  /* G0 */, 20 /* G1 */, 3  /* G2 */, 46 /* G3 */, 9  /* G4 */, 10 /* G5 */,
+  4  /* B0 */, 5  /* B1 */, 6  /* B2 */, 7  /* B3 */, 15 /* B4 */
 );
 
-Arduino_GFX *gfx = new Arduino_ST7701_RGBPanel(
-  rgbpanel,
-  /*rst=*/-1, /*rotation=*/0,
-  /*ips=*/false,
-  /*width=*/480, /*height=*/480
+Arduino_ST7701_RGBPanel *gfx = new Arduino_ST7701_RGBPanel(
+  bus,
+  GFX_NOT_DEFINED /* RST */,
+  0 /* rotation */,
+  true /* IPS */,
+  480 /* width */, 480 /* height */,
+  st7701_type1_init_operations, sizeof(st7701_type1_init_operations),
+  true /* BGR */,
+  10 /* hsync_front_porch */, 8 /* hsync_pulse_width */, 50 /* hsync_back_porch */,
+  10 /* vsync_front_porch */, 8 /* vsync_pulse_width */, 20 /* vsync_back_porch */
 );
-#else
-Arduino_GFX *gfx = nullptr;
-#endif
 
-static void show_color_bars() {
-  if (!gfx) return;
+// ================== TOUCH (GT911) ==================
+#define TOUCH_SDA 19
+#define TOUCH_SCL 45
+#define TOUCH_INT -1
+#define TOUCH_RST -1
 
-  const uint16_t colors[] = {
-    RED, GREEN, BLUE,
-    CYAN, MAGENTA, YELLOW,
-    WHITE, BLACK
-  };
+Touch_GT911 ts(TOUCH_SDA, TOUCH_SCL, TOUCH_INT, TOUCH_RST, 480, 480);
 
-  const int count = sizeof(colors) / sizeof(colors[0]);
-  int w = gfx->width() / count;
-  for (int i = 0; i < count; i++) {
-    gfx->fillRect(i * w, 0, (i == count - 1) ? (gfx->width() - i * w) : w, gfx->height(), colors[i]);
+// ---- Startowe ustawienia mapowania (wg Twoich objawów) ----
+static bool SWAP_XY  = false;
+static bool INVERT_X = true;
+static bool INVERT_Y = true;
+
+// ---- Auto-skalowanie surowych wartości (gdy zakres nie jest 0..479) ----
+static int rawMinX =  99999, rawMaxX = -99999;
+static int rawMinY =  99999, rawMaxY = -99999;
+
+static void updateRawRange(int rx, int ry) {
+  if (rx < rawMinX) rawMinX = rx;
+  if (rx > rawMaxX) rawMaxX = rx;
+  if (ry < rawMinY) rawMinY = ry;
+  if (ry > rawMaxY) rawMaxY = ry;
+}
+
+static int scaleTo480(int v, int vmin, int vmax) {
+  if (vmax <= vmin) return constrain(v, 0, 479);
+  long out = (long)(v - vmin) * 479L / (long)(vmax - vmin);
+  if (out < 0) out = 0;
+  if (out > 479) out = 479;
+  return (int)out;
+}
+
+static void mapTouch(int rx, int ry, int &x, int &y) {
+  // 1) auto-range
+  updateRawRange(rx, ry);
+
+  int sx = scaleTo480(rx, rawMinX, rawMaxX);
+  int sy = scaleTo480(ry, rawMinY, rawMaxY);
+
+  // 2) swap/invert
+  if (SWAP_XY) {
+    int t = sx;
+    sx = sy;
+    sy = t;
   }
+  if (INVERT_X) sx = 479 - sx;
+  if (INVERT_Y) sy = 479 - sy;
+
+  x = constrain(sx, 0, 479);
+  y = constrain(sy, 0, 479);
+}
+
+static void printCfg() {
+  Serial.printf("\nCFG: SWAP_XY=%s  INVERT_X=%s  INVERT_Y=%s\n",
+                SWAP_XY ? "true" : "false",
+                INVERT_X ? "true" : "false",
+                INVERT_Y ? "true" : "false");
+  Serial.printf("RAW RANGE: X[%d..%d] Y[%d..%d]\n", rawMinX, rawMaxX, rawMinY, rawMaxY);
+  Serial.println("Keys: x=toggle invertX, y=toggle invertY, s=toggle swapXY, c=clear, p=print cfg\n");
+}
+
+static void draw_test_screen() {
+  gfx->fillScreen(BLACK);
+
+  int w = gfx->width();
+  int barW = w / 6;
+  uint16_t colors[6] = {RED, GREEN, BLUE, YELLOW, CYAN, MAGENTA};
+  for (int i = 0; i < 6; i++) {
+    gfx->fillRect(i * barW, 0, barW, 60, colors[i]);
+  }
+
+  gfx->setCursor(10, 80);
+  gfx->setTextColor(WHITE);
+  gfx->setTextSize(2);
+  gfx->println("ST7701 RGB TEST");
+
+  gfx->setTextSize(1);
+  gfx->setCursor(10, 110);
+  gfx->println("Arduino_GFX v1.2.9 + Touch_GT911");
+  gfx->setCursor(10, 130);
+  gfx->println("Tap -> dot. Serial: x/y/s to fix mapping.");
+
+  gfx->drawRect(0, 0, gfx->width(), gfx->height(), WHITE);
+}
+
+static void i2c_scan() {
+  Serial.println("I2C scan:");
+  int found = 0;
+  for (uint8_t addr = 1; addr < 127; addr++) {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0) {
+      Serial.printf("  found: 0x%02X\n", addr);
+      found++;
+    }
+  }
+  if (!found) Serial.println("  (nothing found)");
 }
 
 void setup() {
   Serial.begin(115200);
   delay(200);
-  Serial.println("RGB panel color test starting...");
 
-  backlight_pwm_init();
-  backlight_set_percent(100);
+  // Backlight
+  pinMode(GFX_BL, OUTPUT);
+  digitalWrite(GFX_BL, HIGH);
 
-  if (!gfx) {
-    Serial.println("ERROR: gfx is null (wrong target?)");
-    while (1) delay(1000);
-  }
-
+  // DISPLAY
   gfx->begin();
-  gfx->fillScreen(BLACK);
-  delay(500);
+  gfx->setRotation(0);
+  draw_test_screen();
+  Serial.println("Display init OK.");
 
-  // First sanity sequence: full-screen colors
-  gfx->fillScreen(RED);    delay(800);
-  gfx->fillScreen(GREEN);  delay(800);
-  gfx->fillScreen(BLUE);   delay(800);
-  gfx->fillScreen(WHITE);  delay(800);
-  gfx->fillScreen(BLACK);  delay(400);
+  // TOUCH I2C: wymuszone piny (NAJWAŻNIEJSZE)
+  Wire.begin(TOUCH_SDA, TOUCH_SCL);
+  Wire.setClock(400000);
+  delay(50);
 
-  // Then static bars for channel verification
-  show_color_bars();
-  Serial.println("Color bars displayed. If only backlight is visible, check RGB timing/pins.");
+  i2c_scan();
+
+  ts.begin();
+  ts.setRotation(ROTATION_NORMAL);
+
+  printCfg();
+  Serial.println("Touch the screen...");
 }
 
 void loop() {
-  // Blink between bars and gray every 2s so you can confirm refreshing works too
-  static uint32_t last = 0;
-  static bool gray = false;
-  if (millis() - last > 2000) {
-    last = millis();
-    gray = !gray;
-    if (gray) {
-      gfx->fillScreen(0x8410); // mid-gray in RGB565
-    } else {
-      show_color_bars();
+  // Sterowanie z Serial
+  while (Serial.available()) {
+    char ch = Serial.read();
+    if (ch == 'x' || ch == 'X') {
+      INVERT_X = !INVERT_X;
+      printCfg();
+    }
+    if (ch == 'y' || ch == 'Y') {
+      INVERT_Y = !INVERT_Y;
+      printCfg();
+    }
+    if (ch == 's' || ch == 'S') {
+      SWAP_XY = !SWAP_XY;
+      printCfg();
+    }
+    if (ch == 'c' || ch == 'C') {
+      draw_test_screen();
+      Serial.println("Cleared.");
+    }
+    if (ch == 'p' || ch == 'P') {
+      printCfg();
     }
   }
+
+  ts.read();
+
+  if (ts.isTouched && ts.touches > 0) {
+    int rx = ts.points[0].x;
+    int ry = ts.points[0].y;
+
+    int x, y;
+    mapTouch(rx, ry, x, y);
+
+    Serial.printf("RAW(%d,%d) -> XY(%d,%d)\n", rx, ry, x, y);
+    gfx->fillCircle(x, y, 6, WHITE);
+    delay(15);
+  }
+
+  delay(5);
 }
